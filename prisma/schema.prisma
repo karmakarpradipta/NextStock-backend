@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+model User {
+  id           String         @id @default(uuid())
+  name         String
+  email        String         @unique
+  password     String
+  role         Role           @default(STAFF)
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  deletedAt    DateTime?
+  refreshTokens RefreshToken[]
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id                String    @id @default(uuid())
+  name              String
+  sku               String    @unique
+  description       String?
+  imageUrl          String?
+  unit              String
+  minStockThreshold Int       @default(0)
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  stockMovements StockMovement[]
+  vendorProducts     VendorProduct[]
+  purchaseOrderItems PurchaseOrderItem[]
+  saleItems SaleItem[]
+  
+  @@map("products")
+}
+
+model StockMovement {
+  id        String   @id @default(uuid())
+  productId String
+  type      MovementType
+  quantity  Int
+  note      String?
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("stock_movements")
+}
+
+enum MovementType {
+  IN
+  OUT
+  ADJUSTMENT
+}
+
+model Vendor {
+  id             String    @id @default(uuid())
+  name           String
+  contactPerson  String?
+  email          String?   @unique
+  phone          String?
+  address        String?
+  gstNumber      String?   @unique
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  vendorProducts VendorProduct[]
+  purchaseOrders PurchaseOrder[]
+
+  @@map("vendors")
+}
+
+model VendorProduct {
+  id        String   @id @default(uuid())
+  vendorId  String
+  productId String
+  createdAt DateTime @default(now())
+
+  vendor  Vendor  @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, productId])
+  @@map("vendor_products")
+}
+
+model PurchaseOrder {
+  id               String              @id @default(uuid())
+  orderNumber      String              @unique
+  vendorId         String
+  status           PurchaseOrderStatus @default(DRAFT)
+  paymentStatus    PaymentStatus       @default(PENDING)
+  expectedDelivery DateTime?
+  deliveredAt      DateTime?
+  totalAmount      Float               @default(0)
+  paidAmount       Float               @default(0)
+  invoiceUrl       String?
+  notes            String?
+  purchaseDate     DateTime            @default(now())
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  deletedAt        DateTime?
+
+  vendor Vendor              @relation(fields: [vendorId], references: [id])
+  items  PurchaseOrderItem[]
+
+  @@map("purchase_orders")
+}
+
+
+model PurchaseOrderItem {
+  id              String   @id @default(uuid())
+  purchaseOrderId String
+  productId       String
+  quantity        Int
+  unitPrice       Float
+  totalPrice      Float
+  createdAt       DateTime @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+
+  @@map("purchase_order_items")
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  CONFIRMED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+}
+
+model Sale {
+  id            String      @id @default(uuid())
+  invoiceNumber String      @unique
+  status        SaleStatus  @default(DRAFT)
+  paymentStatus PaymentStatus @default(PENDING)
+  customerName  String?
+  customerPhone String?
+  customerEmail String?
+  totalAmount   Float       @default(0)
+  paidAmount    Float       @default(0)
+  notes         String?
+  saleDate      DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  deletedAt     DateTime?
+
+  items SaleItem[]
+
+  @@map("sales")
+}
+
+model SaleItem {
+  id           String  @id @default(uuid())
+  saleId       String
+  productId    String
+  quantity     Int
+  unitPrice    Float
+  totalPrice   Float
+  createdAt    DateTime @default(now())
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("sale_items")
+}
+
+enum SaleStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
