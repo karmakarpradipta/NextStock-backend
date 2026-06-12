@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../../config/db.js";
 import ApiError from "../../utils/ApiError.js";
+import { createAuditLog } from "../../utils/audit.js";
 
 const generateAccessToken = (user) => {
   return jwt.sign(
@@ -31,7 +32,32 @@ export const registerUser = async ({ name, email, password, role }) => {
   return { id: user.id, name: user.name, email: user.email, role: user.role };
 };
 
-export const loginUser = async ({ email, password }) => {
+// export const loginUser = async ({ email, password }) => {
+//   const user = await prisma.user.findUnique({ where: { email } });
+//   if (!user || user.deletedAt) throw new ApiError(401, "Invalid credentials");
+//   if (!user.isActive) throw new ApiError(403, "Account is inactive");
+
+//   const match = await bcrypt.compare(password, user.password);
+//   if (!match) throw new ApiError(401, "Invalid credentials");
+
+//   const accessToken = generateAccessToken(user);
+//   const refreshToken = generateRefreshToken(user);
+
+//   const expiresAt = new Date();
+//   expiresAt.setDate(expiresAt.getDate() + 7);
+
+//   await prisma.refreshToken.create({
+//     data: { token: refreshToken, userId: user.id, expiresAt },
+//   });
+
+//   return {
+//     accessToken,
+//     refreshToken,
+//     user: { id: user.id, name: user.name, email: user.email, role: user.role },
+//   };
+// };
+
+export const loginUser = async ({ email, password }, ipAddress) => {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || user.deletedAt) throw new ApiError(401, "Invalid credentials");
   if (!user.isActive) throw new ApiError(403, "Account is inactive");
@@ -47,6 +73,14 @@ export const loginUser = async ({ email, password }) => {
 
   await prisma.refreshToken.create({
     data: { token: refreshToken, userId: user.id, expiresAt },
+  });
+
+  await createAuditLog({
+    userId: user.id,
+    action: "USER_LOGIN",
+    entity: "User",
+    entityId: user.id,
+    ipAddress,
   });
 
   return {
@@ -78,7 +112,21 @@ export const refreshAccessToken = async (token) => {
   return { accessToken };
 };
 
-export const logoutUser = async (token) => {
+// export const logoutUser = async (token) => {
+//   if (!token) throw new ApiError(400, "No token provided");
+//   await prisma.refreshToken.deleteMany({ where: { token } });
+// };
+
+export const logoutUser = async (token, userId) => {
   if (!token) throw new ApiError(400, "No token provided");
   await prisma.refreshToken.deleteMany({ where: { token } });
+
+  if (userId) {
+    await createAuditLog({
+      userId,
+      action: "USER_LOGOUT",
+      entity: "User",
+      entityId: userId,
+    });
+  }
 };

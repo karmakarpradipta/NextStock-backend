@@ -1,5 +1,6 @@
 import prisma from "../../config/db.js";
 import ApiError from "../../utils/ApiError.js";
+import { createAuditLog } from "../../utils/audit.js";
 
 export const getAllVendors = async (query) => {
   const { page, limit, search, isActive } = query;
@@ -114,7 +115,7 @@ export const getVendorById = async (id) => {
   };
 };
 
-export const createVendor = async (data) => {
+export const createVendor = async (data, userId) => {
   if (data.email) {
     const existing = await prisma.vendor.findUnique({ where: { email: data.email } });
     if (existing) throw new ApiError(409, "Email already in use");
@@ -125,7 +126,7 @@ export const createVendor = async (data) => {
     if (existing) throw new ApiError(409, "GST number already in use");
   }
 
-  return await prisma.vendor.create({
+  const vendor = await prisma.vendor.create({
     data,
     select: {
       id: true, name: true, contactPerson: true,
@@ -133,9 +134,19 @@ export const createVendor = async (data) => {
       address: true, isActive: true, createdAt: true,
     },
   });
+
+  await createAuditLog({
+    userId,
+    action: "VENDOR_CREATED",
+    entity: "Vendor",
+    entityId: vendor.id,
+    metadata: { name: vendor.name, email: vendor.email },
+  });
+
+  return vendor;
 };
 
-export const updateVendor = async (id, data) => {
+export const updateVendor = async (id, data, userId) => {
   const vendor = await prisma.vendor.findFirst({ where: { id, deletedAt: null } });
   if (!vendor) throw new ApiError(404, "Vendor not found");
 
@@ -149,7 +160,7 @@ export const updateVendor = async (id, data) => {
     if (existing) throw new ApiError(409, "GST number already in use");
   }
 
-  return await prisma.vendor.update({
+  const updated = await prisma.vendor.update({
     where: { id },
     data,
     select: {
@@ -157,9 +168,19 @@ export const updateVendor = async (id, data) => {
       email: true, phone: true, isActive: true,
     },
   });
+
+  await createAuditLog({
+    userId,
+    action: "VENDOR_UPDATED",
+    entity: "Vendor",
+    entityId: id,
+    metadata: { changes: data },
+  });
+
+  return updated;
 };
 
-export const deleteVendor = async (id) => {
+export const deleteVendor = async (id, userId) => {
   const vendor = await prisma.vendor.findFirst({ where: { id, deletedAt: null } });
   if (!vendor) throw new ApiError(404, "Vendor not found");
 
@@ -167,9 +188,16 @@ export const deleteVendor = async (id) => {
     where: { id },
     data: { deletedAt: new Date() },
   });
+
+  await createAuditLog({
+    userId,
+    action: "VENDOR_DELETED",
+    entity: "Vendor",
+    entityId: id,
+  });
 };
 
-export const mapProductsToVendor = async (vendorId, productIds) => {
+export const mapProductsToVendor = async (vendorId, productIds, userId) => {
   const vendor = await prisma.vendor.findFirst({ where: { id: vendorId, deletedAt: null } });
   if (!vendor) throw new ApiError(404, "Vendor not found");
 
@@ -187,6 +215,14 @@ export const mapProductsToVendor = async (vendorId, productIds) => {
     skipDuplicates: true,
   });
 
+  await createAuditLog({
+    userId,
+    action: "VENDOR_PRODUCTS_MAPPED",
+    entity: "Vendor",
+    entityId: vendorId,
+    metadata: { productIds },
+  });
+
   return await prisma.vendorProduct.findMany({
     where: { vendorId },
     select: {
@@ -195,7 +231,7 @@ export const mapProductsToVendor = async (vendorId, productIds) => {
   });
 };
 
-export const unmapProductFromVendor = async (vendorId, productId) => {
+export const unmapProductFromVendor = async (vendorId, productId, userId) => {
   const mapping = await prisma.vendorProduct.findUnique({
     where: { vendorId_productId: { vendorId, productId } },
   });
@@ -203,5 +239,13 @@ export const unmapProductFromVendor = async (vendorId, productId) => {
 
   await prisma.vendorProduct.delete({
     where: { vendorId_productId: { vendorId, productId } },
+  });
+
+  await createAuditLog({
+    userId,
+    action: "VENDOR_PRODUCT_UNMAPPED",
+    entity: "Vendor",
+    entityId: vendorId,
+    metadata: { productId },
   });
 };

@@ -1,5 +1,6 @@
 import prisma from "../../config/db.js";
 import ApiError from "../../utils/ApiError.js";
+import { createAuditLog } from "../../utils/audit.js";
 
 // Auto-generate SKU: PRD-00001
 const generateSKU = async () => {
@@ -100,7 +101,7 @@ export const getProductById = async (id) => {
   return { ...rest, currentStock, isLowStock };
 };
 
-export const createProduct = async (data) => {
+export const createProduct = async (data, userId) => {
   const category = await prisma.category.findFirst({
     where: { id: data.categoryId, deletedAt: null, isActive: true },
   });
@@ -125,16 +126,30 @@ export const createProduct = async (data) => {
       categoryId: data.categoryId,
     },
     select: {
-      id: true, name: true, sku: true, unit: true,
-      isActive: true, category: { select: { id: true, name: true } },
+      id: true,
+      name: true,
+      sku: true,
+      unit: true,
+      isActive: true,
+      category: { select: { id: true, name: true } },
     },
+  });
+
+  await createAuditLog({
+    userId,
+    action: "PRODUCT_CREATED",
+    entity: "Product",
+    entityId: product.id,
+    metadata: { name: product.name, sku: product.sku },
   });
 
   return product;
 };
 
-export const updateProduct = async (id, data) => {
-  const product = await prisma.product.findFirst({ where: { id, deletedAt: null } });
+export const updateProduct = async (id, data, userId) => {
+  const product = await prisma.product.findFirst({
+    where: { id, deletedAt: null },
+  });
   if (!product) throw new ApiError(404, "Product not found");
 
   if (data.categoryId) {
@@ -144,22 +159,45 @@ export const updateProduct = async (id, data) => {
     if (!category) throw new ApiError(404, "Category not found");
   }
 
-  return await prisma.product.update({
+  const update = await prisma.product.update({
     where: { id },
     data,
     select: {
-      id: true, name: true, sku: true, unit: true,
-      isActive: true, category: { select: { id: true, name: true } },
+      id: true,
+      name: true,
+      sku: true,
+      unit: true,
+      isActive: true,
+      category: { select: { id: true, name: true } },
     },
   });
+
+  await createAuditLog({
+    userId,
+    action: "PRODUCT_UPDATED",
+    entity: "Product",
+    entityId: id,
+    metadata: { changes: data },
+  });
+
+  return update;
 };
 
-export const deleteProduct = async (id) => {
-  const product = await prisma.product.findFirst({ where: { id, deletedAt: null } });
+export const deleteProduct = async (id, userId) => {
+  const product = await prisma.product.findFirst({
+    where: { id, deletedAt: null },
+  });
   if (!product) throw new ApiError(404, "Product not found");
 
   await prisma.product.update({
     where: { id },
     data: { deletedAt: new Date() },
+  });
+
+  await createAuditLog({
+    userId,
+    action: "PRODUCT_DELETED",
+    entity: "Product",
+    entityId: id,
   });
 };

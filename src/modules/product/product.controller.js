@@ -18,21 +18,21 @@ export const getProductById = async (req, res, next) => {
 
 export const createProduct = async (req, res, next) => {
   try {
-    const product = await productService.createProduct(req.body);
+    const product = await productService.createProduct(req.body, req.user.id);
     res.status(201).json({ success: true, product });
   } catch (err) { next(err); }
 };
 
 export const updateProduct = async (req, res, next) => {
   try {
-    const product = await productService.updateProduct(req.params.id, req.body);
+    const product = await productService.updateProduct(req.params.id, req.body, req.user.id);
     res.json({ success: true, product });
   } catch (err) { next(err); }
 };
 
 export const deleteProduct = async (req, res, next) => {
   try {
-    await productService.deleteProduct(req.params.id);
+    await productService.deleteProduct(req.params.id, req.user.id);
     res.json({ success: true, message: "Product deleted" });
   } catch (err) { next(err); }
 };

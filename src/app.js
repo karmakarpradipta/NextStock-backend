@@ -10,6 +10,9 @@ import vendorRoutes from "./modules/vendor/vendor.routes.js";
 import purchaseRoutes from "./modules/purchase/purchase.routes.js";
 import saleRoutes from "./modules/sale/sale.routes.js";
 import reportsRoutes from "./modules/reports/reports.routes.js";
+import stockRoutes from "./modules/stock/stock.routes.js";
+import auditRoutes from "./modules/audit/audit.routes.js";
+import requisitionRoutes from "./modules/requisition/requisition.routes.js";
 
 const app = express();
 
@@ -30,10 +33,13 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/stock", stockRoutes);
 app.use("/api/vendors", vendorRoutes);
 app.use("/api/purchases", purchaseRoutes);
 app.use("/api/sales", saleRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/audit", auditRoutes);
+app.use("/api/requisitions", requisitionRoutes);
 
 // Global error handler
 app.use(errorHandler);

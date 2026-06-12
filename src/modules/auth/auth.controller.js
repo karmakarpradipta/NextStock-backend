@@ -16,11 +16,22 @@ export const register = async (req, res, next) => {
   }
 };
 
+// export const login = async (req, res, next) => {
+//   try {
+//     const { accessToken, refreshToken, user } = await authService.loginUser(
+//       req.body,
+//     );
+//     res.cookie("refreshToken", refreshToken, cookieOptions);
+//     res.json({ success: true, accessToken, user });
+//   } catch (err) {
+//     next(err);
+//   }
+// };
+
 export const login = async (req, res, next) => {
   try {
-    const { accessToken, refreshToken, user } = await authService.loginUser(
-      req.body,
-    );
+    const ipAddress = req.ip || req.headers["x-forwarded-for"];
+    const { accessToken, refreshToken, user } = await authService.loginUser(req.body, ipAddress);
     res.cookie("refreshToken", refreshToken, cookieOptions);
     res.json({ success: true, accessToken, user });
   } catch (err) {
@@ -38,10 +49,22 @@ export const refresh = async (req, res, next) => {
   }
 };
 
+// export const logout = async (req, res, next) => {
+//   try {
+//     const token = req.cookies.refreshToken;
+//     await authService.logoutUser(token);
+//     res.clearCookie("refreshToken");
+//     res.json({ success: true, message: "Logged out" });
+//   } catch (err) {
+//     next(err);
+//   }
+// };
+
 export const logout = async (req, res, next) => {
   try {
     const token = req.cookies.refreshToken;
-    await authService.logoutUser(token);
+    const userId = req.user?.id; // add verifyToken to logout route
+    await authService.logoutUser(token, userId);
     res.clearCookie("refreshToken");
     res.json({ success: true, message: "Logged out" });
   } catch (err) {

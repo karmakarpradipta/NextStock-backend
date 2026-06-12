@@ -2,8 +2,9 @@ import { z } from "zod";
 
 const orderItemSchema = z.object({
   productId: z.string({ required_error: "Product ID is required" }).uuid("Invalid product ID"),
-  quantity: z.number({ required_error: "Quantity is required" }).int().min(1, "Quantity must be at least 1"),
-  unitPrice: z.number({ required_error: "Unit price is required" }).min(0, "Unit price cannot be negative"),
+  quantity: z.number({ required_error: "Quantity is required" }).int().min(1),
+  unitPrice: z.number({ required_error: "Unit price is required" }).min(0),
+  requisitionId: z.string().uuid("Invalid requisition ID").optional(),
 });
 
 export const createPurchaseSchema = z.object({

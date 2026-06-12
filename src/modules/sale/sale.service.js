@@ -1,6 +1,7 @@
 import prisma from "../../config/db.js";
 import ApiError from "../../utils/ApiError.js";
 import { generateOrderNumber } from "../../utils/generateOrderNumber.js";
+import { createAuditLog } from "../../utils/audit.js";
 
 const computePaymentStatus = (totalAmount, paidAmount) => {
   if (paidAmount <= 0) return "PENDING";
@@ -88,7 +89,7 @@ export const getSaleById = async (id) => {
   return sale;
 };
 
-export const createSale = async (data) => {
+export const createSale = async (data, userId) => {
   const productIds = data.items.map(i => i.productId);
   const products = await prisma.product.findMany({
     where: { id: { in: productIds }, deletedAt: null },
@@ -98,7 +99,7 @@ export const createSale = async (data) => {
   const invoiceNumber = await generateOrderNumber("INV", "sale");
   const totalAmount = data.items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
 
-  return await prisma.sale.create({
+  const sale = await prisma.sale.create({
     data: {
       invoiceNumber,
       totalAmount,
@@ -124,9 +125,19 @@ export const createSale = async (data) => {
       },
     },
   });
+
+  await createAuditLog({
+    userId,
+    action: "SALE_CREATED",
+    entity: "Sale",
+    entityId: sale.id,
+    metadata: { invoiceNumber, totalAmount, customerName: sale.customerName },
+  });
+
+  return sale;
 };
 
-export const updateSale = async (id, data) => {
+export const updateSale = async (id, data, userId) => {
   const sale = await prisma.sale.findFirst({ where: { id, deletedAt: null } });
   if (!sale) throw new ApiError(404, "Sale not found");
   if (sale.status !== "DRAFT") throw new ApiError(400, "Only DRAFT sales can be edited");
@@ -135,7 +146,7 @@ export const updateSale = async (id, data) => {
     ? data.items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0)
     : sale.totalAmount;
 
-  return await prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     if (data.items) {
       await tx.saleItem.deleteMany({ where: { saleId: id } });
       await tx.saleItem.createMany({
@@ -168,9 +179,19 @@ export const updateSale = async (id, data) => {
       },
     });
   });
+
+  await createAuditLog({
+    userId,
+    action: "SALE_UPDATED",
+    entity: "Sale",
+    entityId: id,
+    metadata: { changes: data },
+  });
+
+  return updated;
 };
 
-export const confirmSale = async (id) => {
+export const confirmSale = async (id, userId) => {
   const sale = await prisma.sale.findFirst({
     where: { id, deletedAt: null },
     include: { items: true },
@@ -178,7 +199,7 @@ export const confirmSale = async (id) => {
   if (!sale) throw new ApiError(404, "Sale not found");
   if (sale.status !== "DRAFT") throw new ApiError(400, "Only DRAFT sales can be confirmed");
 
-  return await prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     // check stock availability for all items first
     for (const item of sale.items) {
       const currentStock = await getLiveStock(item.productId, tx);
@@ -210,9 +231,18 @@ export const confirmSale = async (id) => {
       data: { status: "CONFIRMED" },
     });
   });
+
+  await createAuditLog({
+    userId,
+    action: "SALE_CONFIRMED",
+    entity: "Sale",
+    entityId: id,
+  });
+
+  return updated;
 };
 
-export const cancelSale = async (id) => {
+export const cancelSale = async (id, userId) => {
   const sale = await prisma.sale.findFirst({
     where: { id, deletedAt: null },
     include: { items: true },
@@ -220,7 +250,7 @@ export const cancelSale = async (id) => {
   if (!sale) throw new ApiError(404, "Sale not found");
   if (sale.status === "CANCELLED") throw new ApiError(400, "Sale already cancelled");
 
-  return await prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     // reverse stock only if confirmed
     if (sale.status === "CONFIRMED") {
       await Promise.all(
@@ -242,9 +272,18 @@ export const cancelSale = async (id) => {
       data: { status: "CANCELLED" },
     });
   });
+
+  await createAuditLog({
+    userId,
+    action: "SALE_CANCELLED",
+    entity: "Sale",
+    entityId: id,
+  });
+
+  return updated;
 };
 
-export const updateSalePayment = async (id, paidAmount) => {
+export const updateSalePayment = async (id, paidAmount, userId) => {
   const sale = await prisma.sale.findFirst({ where: { id, deletedAt: null } });
   if (!sale) throw new ApiError(404, "Sale not found");
   if (sale.status === "CANCELLED") throw new ApiError(400, "Cannot update payment on cancelled sale");
@@ -252,9 +291,19 @@ export const updateSalePayment = async (id, paidAmount) => {
 
   const paymentStatus = computePaymentStatus(sale.totalAmount, paidAmount);
 
-  return await prisma.sale.update({
+  const updated = await prisma.sale.update({
     where: { id },
     data: { paidAmount, paymentStatus },
     select: { id: true, invoiceNumber: true, totalAmount: true, paidAmount: true, paymentStatus: true },
   });
+
+  await createAuditLog({
+    userId,
+    action: "SALE_PAYMENT_UPDATED",
+    entity: "Sale",
+    entityId: id,
+    metadata: { paidAmount, paymentStatus },
+  });
+
+  return updated;
 };
